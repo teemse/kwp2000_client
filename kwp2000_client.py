@@ -291,8 +291,8 @@ class KWPUtils:
 class KWP2000GUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Диагностика KWP2000 (M1.5.4N)")
-        self.root.geometry("900x700")
+        self.root.title("Диагностика Январь(M1.5.4N)")
+        self.root.geometry("500x500")
 
         # Переменные
         self.port_var = tk.StringVar(value="COM2")
