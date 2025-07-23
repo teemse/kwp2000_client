@@ -516,6 +516,7 @@ class KWP2000GUI:
         """Отключение от ЭБУ"""
         if self.kwp:
             try:
+                self.kwp.stop_dignostic_session()
                 self.kwp.stop_communication()
                 self.kwp.close()
                 self.connected = False
