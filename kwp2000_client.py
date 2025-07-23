@@ -70,8 +70,9 @@ class KWP2000:
         self.ser.write(full_message)
 
         # Задержка перед чтением ответа
-        time.sleep(5)  # Подберите оптимальное значение
+        time.sleep(0.5)  # Подберите оптимальное значение
         # Чтение ответа
+        self.ser.read(len(full_message))
         response = self.ser.read_all()
         print(
             f"Получено: {response.hex().upper() if response else 'Нет ответа'}")
@@ -249,21 +250,21 @@ class KWPUtils:
 
         # Комплектация 1
         equip1 = response_data[2]
-        params['oxygen_sensor'] = bool(equip1 & 0x01)
-        params['canister_purge'] = bool(equip1 & 0x02)
+        params['Датчик кислорода'] = bool(equip1 & 0x01)
+        params['Адсорбер'] = bool(equip1 & 0x02)
         # ... другие флаги комплектации
 
         # Температура охлаждающей жидкости
         coolant_temp = response_data[10] - 40
-        params['coolant_temp'] = f"{coolant_temp} °C"
+        params['Температура ОЖ'] = f"{coolant_temp} °C"
 
         # Обороты двигателя
         rpm = response_data[13] * 40
-        params['rpm'] = f"{rpm} об/мин"
+        params['Обороты'] = f"{rpm} об/мин"
 
         # Напряжение бортсети
         voltage = 5.2 + response_data[20] * 0.05
-        params['voltage'] = f"{voltage:.2f} В"
+        params['Бортовое напряжение'] = f"{voltage:.2f} В"
 
         # ... другие параметры согласно спецификации
 
@@ -280,7 +281,7 @@ class KWP2000GUI:
         self.root.geometry("900x700")
 
         # Переменные
-        self.port_var = tk.StringVar(value="COM3")
+        self.port_var = tk.StringVar(value="COM2")
         self.baudrate_var = tk.IntVar(value=10400)
         self.connected = False
         self.kwp = None
@@ -375,7 +376,7 @@ class KWP2000GUI:
         ttk.Label(tab, text="Идентификатор:").pack(pady=(5, 0))
 
         self.data_id_combo = ttk.Combobox(tab, values=[
-            ("01 - After Sales Service", 0x01),
+            ("01 - Комплектация", 0x01),
             ("02 - End Of Line", 0x02),
             ("03 - Factory Test", 0x03),
             ("A0 - Immobilizer", 0xA0),
