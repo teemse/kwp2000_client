@@ -33,6 +33,10 @@ class KWP2000:
 
         # Отправка запроса startCommunication
         response = self.start_communication()
+        time.sleep(0.5)
+        response = self.start_dignostic_session()
+        time.sleep(0.5)
+        response = self.tester_present()
         return response
 
     def build_header(self, length, has_length_byte=False):
@@ -110,6 +114,16 @@ class KWP2000:
     def start_communication(self):
         """Сервис StartCommunication (0x81)"""
         response = self.send_request(0x81)
+        return self.parse_response(response)
+
+    def start_dignostic_session(self, session_type=0x81, baudrate=0x0A):
+        """Сервис start_dignostic_session (0x81)"""
+        response = self.send_request(0x10, bytes([session_type, baudrate]))
+        return self.parse_response(response)
+
+    def stop_dignostic_session(self):
+        """Сервис start_dignostic_session (0x81)"""
+        response = self.send_request(0x20)
         return self.parse_response(response)
 
     def stop_communication(self):
