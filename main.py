@@ -1,4 +1,4 @@
-from gui import KWP2000GUI
+from gui.gui import KWP2000GUI
 import customtkinter as ctk
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@ class KWP2000GUI:
         self.create_log_frame()
 
         # Запрещаем изменение размеров окна
-        self.root.resizable(False, False)
+        # self.root.resizable(False, False)
 
     def create_connection_frame(self):
         """Панель подключения"""
