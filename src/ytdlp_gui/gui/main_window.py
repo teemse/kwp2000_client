@@ -8,12 +8,9 @@ Date: 18.07.2025
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
-import threading
-import logging
-from pathlib import Path
 import time
 
-from ytdlp_gui.core.download_manager import DownloadManager
+
 from ytdlp_gui.core.settings_manager import SettingsManager
 from ytdlp_gui.gui.components.url_input import URLInputFrame
 from ytdlp_gui.gui.components.format_selector import FormatSelectorFrame
@@ -23,508 +20,418 @@ from ytdlp_gui.gui.components.download_queue import DownloadQueueFrame
 from ytdlp_gui.gui.components.simple_url_input import SimpleURLInputFrame
 from ytdlp_gui.gui.components.video_preview import VideoPreviewFrame
 from ytdlp_gui.gui.components.download_options import DownloadOptionsFrame
-from ytdlp_gui.utils.notifications import init_notifications, get_notification_manager, get_error_handler
-from ytdlp_gui.utils.logger import init_logging, get_logger
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-class YTDLPGUIApp:
-    """Main app class"""
 
-    def __init__(self):
-        self.log_manager = init_logging()
-        self.logger = get_logger(__name__)
+class KWP2000GUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Диагностика Январь(M1.5.4N)")
+        self.root.geometry("500x500")
 
-        self.settings_manager = SettingsManager()
-        self.download_manager = DownloadManager(self.settings_manager)
+        # Переменные
+        self.port_var = tk.StringVar(value="COM2")
+        self.baudrate_var = tk.IntVar(value=10400)
+        self.connected = False
+        self.kwp = None
 
-        self.notification_manager = None
-        self.error_handler = None
+        # Создаем интерфейс
+        self.create_connection_frame()
+        self.create_services_frame()
+        self.create_log_frame()
 
-        self.startup_time = time.time()
-        self.startup_grace_period = 3.0
-        self.startup_failed_ids = set()
+        # Запрещаем изменение размеров окна
+        self.root.resizable(False, False)
 
-        # UI state
-        self.current_state = "url_input"
-        self.current_url = ""
-        self.current_video_info = None
-        self.preview_container = None
+    def create_connection_frame(self):
+        """Панель подключения"""
+        frame = ttk.LabelFrame(self.root, text="Подключение", padding=10)
+        frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
 
-        # Main window
-        self.root = ctk.CTk()
-        self.root.title("YT-DLP GUI")
-        self.root.geometry("1200x750")
-        self.root.minsize(1000, 650)
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # Порт
+        ttk.Label(frame, text="Порт:").grid(row=0, column=0, sticky="e")
+        self.port_entry = ttk.Entry(
+            frame, textvariable=self.port_var, width=10)
+        self.port_entry.grid(row=0, column=1, sticky="w")
 
-        # Try to set icon
+        # Скорость
+        ttk.Label(frame, text="Скорость:").grid(row=0, column=2, sticky="e")
+        self.baudrate_combo = ttk.Combobox(frame,
+                                           textvariable=self.baudrate_var,
+                                           values=[10400, 38400, 57600],
+                                           width=8)
+        self.baudrate_combo.grid(row=0, column=3, sticky="w")
+
+        # Кнопки подключения
+        self.connect_btn = ttk.Button(
+            frame, text="Подключиться", command=self.connect)
+        self.connect_btn.grid(row=0, column=4, padx=5)
+
+        self.disconnect_btn = ttk.Button(
+            frame, text="Отключиться",
+            command=self.disconnect,
+            state=tk.DISABLED)
+        self.disconnect_btn.grid(row=0, column=5, padx=5)
+
+        # Статус
+        self.status_label = ttk.Label(
+            frame, text="Отключено", foreground="red")
+        self.status_label.grid(row=1, column=0, columnspan=6, pady=(5, 0))
+
+    def create_services_frame(self):
+        """Панель сервисов"""
+        frame = ttk.LabelFrame(self.root, text="Сервисы", padding=10)
+        frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+        # Вкладки
+        self.notebook = ttk.Notebook(frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        # Вкладка общей диагностики
+        self.create_general_tab()
+
+        # Вкладка чтения параметров
+        self.create_read_data_tab()
+
+        # Вкладка управления
+        self.create_control_tab()
+
+    def create_general_tab(self):
+        """Вкладка общей диагностики"""
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text="Общая диагностика")
+
+        # Кнопки
+        ttk.Button(tab, text="Идентификация ЭБУ",
+                   command=self.read_ident).pack(pady=5, fill=tk.X)
+        ttk.Button(tab, text="Прочитать ошибки",
+                   command=self.read_dtc).pack(pady=5, fill=tk.X)
+        ttk.Button(tab, text="Стереть ошибки",
+                   command=self.clear_dtc).pack(pady=5, fill=tk.X)
+        ttk.Button(tab, text="Сброс ЭБУ", command=self.ecu_reset).pack(
+            pady=5, fill=tk.X)
+
+        # Поле для вывода результатов
+        self.general_result = scrolledtext.ScrolledText(
+            tab, height=10, state=tk.DISABLED)
+        self.general_result.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+    def create_read_data_tab(self):
+        """Вкладка чтения параметров"""
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text="Параметры")
+
+        # Выбор идентификатора
+        ttk.Label(tab, text="Идентификатор:").pack(pady=(5, 0))
+
+        self.data_id_combo = ttk.Combobox(tab, values=[
+            ("01 - Комплектация", 0x01),
+            ("02 - End Of Line", 0x02),
+            ("03 - Factory Test", 0x03),
+            ("A0 - Immobilizer", 0xA0),
+            ("A1 - Body Serial", 0xA1),
+            ("A2 - Engine Serial", 0xA2),
+            ("A3 - Manufacture Date", 0xA3)
+        ], state="readonly")
+        self.data_id_combo.pack(pady=5, fill=tk.X)
+        self.data_id_combo.current(0)
+
+        # Кнопки
+        ttk.Button(tab, text="Прочитать данные",
+                   command=self.read_data).pack(pady=5, fill=tk.X)
+
+        # Поле для вывода
+        self.data_result = scrolledtext.ScrolledText(
+            tab, height=10, state=tk.DISABLED)
+        self.data_result.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+    def create_control_tab(self):
+        """Вкладка управления исполнительными механизмами"""
+        tab = ttk.Frame(self.notebook)
+        self.notebook.add(tab, text="Управление")
+
+        # Выбор устройства
+        ttk.Label(tab, text="Устройство:").pack(pady=(5, 0))
+
+        self.control_combo = ttk.Combobox(tab, values=[
+            ("Бензонасос (09)", 0x09),
+            ("Вентилятор (0A)", 0x0A),
+            ("Кондиционер (0B)", 0x0B),
+            ("Лампа неисправности (0C)", 0x0C),
+            ("Клапан адсорбера (0D)", 0x0D),
+            ("Регулятор ХХ (41)", 0x41),
+            ("Обороты ХХ (42)", 0x42)
+        ], state="readonly")
+        self.control_combo.pack(pady=5, fill=tk.X)
+        self.control_combo.current(0)
+
+        # Состояние
+        ttk.Label(tab, text="Действие:").pack(pady=(5, 0))
+
+        self.action_combo = ttk.Combobox(tab, values=[
+            "Включить",
+            "Выключить",
+            "Отчет о состоянии",
+            "Сбросить в默认ное"
+        ], state="readonly")
+        self.action_combo.pack(pady=5, fill=tk.X)
+        self.action_combo.current(0)
+
+        # Кнопка
+        ttk.Button(tab, text="Выполнить", command=self.control_device).pack(
+            pady=5, fill=tk.X)
+
+        # Поле для вывода
+        self.control_result = scrolledtext.ScrolledText(
+            tab, height=10, state=tk.DISABLED)
+        self.control_result.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+    def create_log_frame(self):
+        """Лог сообщений"""
+        frame = ttk.LabelFrame(self.root, text="Лог", padding=10)
+        frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+
+        self.log_text = scrolledtext.ScrolledText(
+            frame, height=10, state=tk.DISABLED)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+
+        # Настройка grid для растягивания лога
+        self.root.rowconfigure(2, weight=1)
+        self.root.columnconfigure(0, weight=1)
+
+    def log_message(self, message):
+        """Добавление сообщения в лог"""
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.insert(tk.END, message + "\n")
+        self.log_text.config(state=tk.DISABLED)
+        self.log_text.see(tk.END)
+
+    def clear_result(self, text_widget):
+        """Очистка поля вывода"""
+        text_widget.config(state=tk.NORMAL)
+        text_widget.delete(1.0, tk.END)
+        text_widget.config(state=tk.DISABLED)
+
+    def append_result(self, text_widget, text):
+        """Добавление текста в поле вывода"""
+        text_widget.config(state=tk.NORMAL)
+        text_widget.insert(tk.END, text + "\n")
+        text_widget.config(state=tk.DISABLED)
+        text_widget.see(tk.END)
+
+    def connect(self):
+        """Подключение к ЭБУ"""
+        port = self.port_var.get()
+        baudrate = self.baudrate_var.get()
+
         try:
-            icon_path = Path(__file__).parent.parent.parent / "assets" / "icon.ico"
-            if icon_path.exists():
-                self.root.iconbitmap(str(icon_path))
-        except:
-            pass
+            self.kwp = KWP2000(port, baudrate)
+            response = self.kwp.connect()
 
-        self.setup_ui()
-        self.setup_bindings()
-
-        self.notification_manager = init_notifications(self.root)
-        self.error_handler = get_error_handler()
-
-        notifications_enabled = self.settings_manager.get('notification_enabled', True)
-        self.notification_manager.enable_notifications(notifications_enabled)
-
-        self._mark_existing_failed_downloads()
-        
-    def setup_ui(self):
-        """Setup UI"""
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(0, weight=1)
-        self.create_all_components()
-        self.show_url_input_state()
-
-    def create_all_components(self):
-        """Create UI components"""
-        self.main_frame = ctk.CTkFrame(self.root)
-        self.main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        self.main_frame.grid_columnconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(0, weight=1)
-
-        self.simple_url_input = SimpleURLInputFrame(
-            self.main_frame,
-            on_url_submit=self.on_url_submitted
-        )
-
-        self.video_preview_frame = VideoPreviewFrame(
-            self.main_frame,
-            on_download_click=self.on_preview_download_click,
-            settings_manager=self.settings_manager
-        )
-
-        self.download_options_frame = DownloadOptionsFrame(
-            self.main_frame,
-            settings_manager=self.settings_manager,
-            on_download_click=self.on_options_download_click
-        )
-
-        self.fixed_buttons_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.fixed_buttons_frame.grid_columnconfigure(1, weight=1)
-
-        self.back_button = ctk.CTkButton(
-            self.fixed_buttons_frame,
-            text="Back",
-            width=120,
-            height=36,
-            font=ctk.CTkFont(size=13),
-            command=self.show_url_input
-        )
-        self.back_button.grid(row=0, column=0, sticky="w")
-
-        self.start_button = ctk.CTkButton(
-            self.fixed_buttons_frame,
-            text="Start",
-            width=120,
-            height=36,
-            font=ctk.CTkFont(size=13),
-            command=self.on_start_download_click
-        )
-        self.start_button.grid(row=0, column=2, sticky="e")
-
-        # 4. Progress Display Frame
-        self.progress_frame = ProgressDisplayFrame(self.main_frame)
-
-        # Set up clear errors callback
-        self.progress_frame.set_clear_errors_callback(self.clear_failed_downloads)
-
-        # Set up new download callback
-        self.progress_frame.set_new_download_callback(self.show_url_input)
-
-        # 5. Download Queue Frame
-        self.download_queue_frame = DownloadQueueFrame(
-            self.main_frame,
-            download_manager=self.download_manager,
-            on_home_click=self.show_url_input
-        )
-
-        # Setup progress tracking
-        self.setup_progress_tracking()
-
-        # Keep old components for compatibility (hidden)
-        self.create_legacy_components()
-
-    def create_legacy_components(self):
-        """Create legacy components for compatibility (hidden by default)"""
-        # Create a hidden frame for legacy components
-        self.legacy_frame = ctk.CTkFrame(self.main_frame)
-        # Don't grid it - keep it hidden
-
-        # URL Input Frame (legacy)
-        self.url_input_frame = URLInputFrame(
-            self.legacy_frame,
-            on_url_change=self.on_url_change,
-            on_add_to_queue=self.add_to_queue
-        )
-
-        # Format Selector (legacy)
-        self.format_selector_frame = FormatSelectorFrame(
-            self.legacy_frame,
-            on_format_change=self.on_format_change
-        )
-
-        # Output Directory Selector (legacy)
-        self.output_selector_frame = OutputSelectorFrame(
-            self.legacy_frame,
-            settings_manager=self.settings_manager,
-            on_output_change=self.on_output_change
-        )
-
-    def setup_bindings(self):
-        """Set up event bindings"""
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-
-    # State Management Methods
-    def show_url_input_state(self):
-        """Show only the URL input (initial state)"""
-        self.logger.info("Switching to URL input state")
-        self.current_state = "url_input"
-        self.hide_all_frames()
-
-        # Configure main frame for single component
-        self.main_frame.grid_rowconfigure(0, weight=1)
-        self.main_frame.grid_rowconfigure(1, weight=0)
-
-        self.simple_url_input.grid(row=0, column=0, sticky="nsew")
-
-        # Force update and refresh
-        self.main_frame.update_idletasks()
-        self.logger.info("URL input state shown")
-
-    def show_preview_state(self, url: str):
-        """Show video preview with download options"""
-        self.logger.info(f"Switching to preview state for URL: {url}")
-        self.current_state = "preview"
-        self.current_url = url
-        self.hide_all_frames()
-
-        # Simple, clean layout - three rows with proper spacing
-        self.main_frame.grid_rowconfigure(0, weight=1)  # Video preview - takes most space
-        self.main_frame.grid_rowconfigure(1, weight=0)  # Download options - compact
-        self.main_frame.grid_rowconfigure(2, weight=0)  # Buttons - fixed at bottom
-        self.main_frame.grid_columnconfigure(0, weight=1)
-
-        # Show video preview frame - clean and spacious
-        self.video_preview_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 10))
-
-        # Show download options frame - centered and compact
-        self.download_options_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=10)
-
-        # Show buttons frame - clean bottom placement
-        self.fixed_buttons_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(10, 20))
-
-        # Force update and refresh
-        self.main_frame.update_idletasks()
-
-        # Load video info
-        self.video_preview_frame.load_video_info(url)
-
-        # Load available video qualities
-        self.download_options_frame.load_video_qualities(url)
-
-        self.logger.info("Preview state setup complete")
-
-    def show_download_state(self):
-        """Show download queue only"""
-        self.logger.info("Switching to download state")
-        self.current_state = "download"
-        self.hide_all_frames()
-
-        # Configure main frame for single component: download queue only
-        self.main_frame.grid_rowconfigure(0, weight=1)
-        self.main_frame.grid_columnconfigure(0, weight=1)
-
-        # Show only download queue (no Current Download)
-        self.download_queue_frame.grid(row=0, column=0, sticky="nsew", padx=15, pady=15)
-
-        # Force update
-        self.main_frame.update_idletasks()
-        self.logger.info("Download state shown")
-
-    def hide_all_frames(self):
-        """Hide all main frames"""
-        self.logger.info("Hiding all frames")
-        self.simple_url_input.grid_remove()
-        self.video_preview_frame.grid_remove()
-        self.download_options_frame.grid_remove()
-        self.progress_frame.grid_remove()
-        self.download_queue_frame.grid_remove()
-        self.fixed_buttons_frame.grid_remove()
-
-        # Remove preview container if it exists
-        if hasattr(self, 'preview_container') and self.preview_container:
-            self.preview_container.destroy()
-            self.preview_container = None
-
-        # Also remove any other containers
-        for widget in self.main_frame.winfo_children():
-            if isinstance(widget, ctk.CTkFrame) and widget not in [
-                self.simple_url_input, self.video_preview_frame,
-                self.download_options_frame, self.progress_frame, self.download_queue_frame,
-                self.legacy_frame, self.fixed_buttons_frame
-            ]:
-                widget.destroy()
-        self.logger.info("All frames hidden")
-
-    # Event Handlers for New UI
-    def on_url_submitted(self, url: str):
-        """Handle URL submission from simple input"""
-        self.logger.info(f"URL submitted: {url}")
-        try:
-            self.show_preview_state(url)
-        except Exception as e:
-            self.logger.error(f"Failed to show preview state: {e}")
-            import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-
-    def on_preview_download_click(self, url: str):
-        """Handle download click from video preview"""
-        # This should not be used - download options are separate
-        pass
-
-    def on_options_download_click(self, format_info: dict, output_path: str):
-        """Handle download click from options"""
-        self.logger.info(f"Starting download with format: {format_info}")
-
-        # Get video title from preview component
-        video_info = self.video_preview_frame.get_video_info()
-        video_title = None
-        if video_info and video_info.get('title'):
-            video_title = video_info['title']
-            self.logger.info(f"Using title from preview: '{video_title}'")
-
-
-
-        self.show_download_state()
-
-        # Start the actual download
-        try:
-            download_id = self.download_manager.add_download(
-                self.current_url, format_info, output_path, video_title
-            )
-            self.logger.info(f"Download started with ID: {download_id}")
-        except Exception as e:
-            self.logger.error(f"Failed to start download: {e}")
-            self.progress_frame.show_error(f"Failed to start download: {str(e)}")
-
-    def on_start_download_click(self):
-        """Handle start download click from fixed button"""
-        self.logger.info("Start button clicked")
-        # Get format info from download options and start download
-        self.download_options_frame.start_download()
-
-    def go_back_from_downloads(self):
-        """Go back from downloads page"""
-        if self.current_url:
-            # If we have a current URL, go back to preview
-            self.show_preview_state(self.current_url)
-        else:
-            # Otherwise go to URL input
-            self.show_url_input()
-
-    def show_url_input(self):
-        """Return to URL input state (called by back button)"""
-        self.logger.info("show_url_input called (back button)")
-        self.show_url_input_state()
-        self.simple_url_input.clear_url()
-
-    def return_to_start(self):
-        """Return to initial URL input state after download completion"""
-        if self.current_state == "download":
-            self.show_url_input_state()
-            self.simple_url_input.clear_url()
-            self.current_url = ""
-            self.current_video_info = None
-
-    def _mark_existing_failed_downloads(self):
-        """Mark all existing failed downloads as 'old' to avoid showing them"""
-        try:
-            for item in self.download_manager.get_queue():
-                if item.status.value == 'failed':
-                    self.startup_failed_ids.add(item.id)
-
-            self.logger.info(f"Marked {len(self.startup_failed_ids)} existing failed downloads as old")
-        except Exception as e:
-            self.logger.error(f"Error marking existing failed downloads: {e}")
-
-    def setup_progress_tracking(self):
-        """Setup progress tracking for downloads"""
-        # Add callback for queue changes to track active downloads
-        self.download_manager.add_queue_callback(self.on_queue_change)
-
-        # Start periodic progress updates
-        self.update_progress_display()
-
-    def update_progress_display(self):
-        """Update progress display with current active download"""
-        try:
-            # Get current active download (prioritize downloading status)
-            active_download = None
-            pending_download = None
-
-            for item in self.download_manager.get_queue():
-                if item.status.value == 'downloading':
-                    active_download = item
-                    break
-                elif item.status.value == 'pending' and pending_download is None:
-                    pending_download = item
-
-            # Update progress display
-            if active_download:
-                self.progress_frame.update_progress(active_download)
-            elif pending_download:
-                # Show pending download with preparing state
-                self.progress_frame.show_preparing(pending_download.title or "Preparing download...")
+            if response.get('type') == 'response':
+                self.connected = True
+                self.connect_btn.config(state=tk.DISABLED)
+                self.disconnect_btn.config(state=tk.NORMAL)
+                self.status_label.config(text="Подключено", foreground="green")
+                self.log_message(
+                    f"Успешное подключение к {port} на скорости {baudrate}")
             else:
-                # Check if any downloads completed recently
-                completed_downloads = [
-                    item for item in self.download_manager.get_queue()
-                    if item.status.value == 'completed'
-                ]
+                self.log_message(f"Ошибка подключения: {response}")
+                messagebox.showerror(
+                    "Ошибка", f"Не удалось подключиться: {response}")
 
-                # Check for failed downloads - but don't show them in UI anymore
-                # (Failed downloads are still tracked in the queue and can be cleared manually)
+        except SerialException as e:
+            self.log_message(f"Ошибка COM-порта: {str(e)}")
+            messagebox.showerror("Ошибка", f"Ошибка COM-порта: {str(e)}")
+        except Exception as e:
+            self.log_message(f"Неизвестная ошибка: {str(e)}")
+            messagebox.showerror("Ошибка", f"Неизвестная ошибка: {str(e)}")
 
-                if completed_downloads:
-                    # Show the most recently completed download briefly
-                    latest_completed = max(completed_downloads, key=lambda x: x.completed_at or 0)
-                    if not hasattr(self, '_last_completed_id') or self._last_completed_id != latest_completed.id:
-                        self.progress_frame.show_success(f"Download completed: {latest_completed.title}")
-                        self._last_completed_id = latest_completed.id
+    def disconnect(self):
+        """Отключение от ЭБУ"""
+        if self.kwp:
+            try:
+                self.kwp.stop_dignostic_session()
+                self.kwp.stop_communication()
+                self.kwp.close()
+                self.connected = False
+                self.connect_btn.config(state=tk.NORMAL)
+                self.disconnect_btn.config(state=tk.DISABLED)
+                self.status_label.config(text="Отключено", foreground="red")
+                self.log_message("Отключено от ЭБУ")
+            except Exception as e:
+                self.log_message(f"Ошибка отключения: {str(e)}")
 
-                        # If we're in download state, show completion but don't auto-return
-                        # User can manually click "New Download" button if they want to start over
-                        # Clear after 3 seconds
-                        self.root.after(3000, lambda: self.progress_frame.clear_progress())
-                    else:
-                        self.progress_frame.clear_progress()
+    def read_ident(self):
+        """Чтение идентификации ЭБУ"""
+        if not self.check_connection():
+            return
+
+        self.clear_result(self.general_result)
+        self.append_result(self.general_result, "=== Идентификация ЭБУ ===")
+
+        try:
+            response = self.kwp.read_ecu_identification(0x80)
+            if response.get('type') == 'response':
+                ident_data = KWPUtils.parse_identification(response['data'])
+
+                for key, value in ident_data.items():
+                    self.append_result(self.general_result, f"{key}: {value}")
+            else:
+                self.append_result(self.general_result, f"Ошибка: {response}")
+
+        except Exception as e:
+            self.append_result(self.general_result, f"Ошибка: {str(e)}")
+
+    def read_dtc(self):
+        """Чтение кодов ошибок"""
+        if not self.check_connection():
+            return
+
+        self.clear_result(self.general_result)
+        self.append_result(self.general_result, "=== Коды неисправностей ===")
+
+        try:
+            response = self.kwp.read_dtc_by_status()
+            if response.get('type') == 'response':
+                dtcs = KWPUtils.parse_dtcs(response['data'])
+
+                if dtcs:
+                    for dtc in dtcs:
+                        self.append_result(self.general_result,
+                                           f"{dtc['code']}: {', '.join(dtc['status_flags'])}")
                 else:
-                    self.progress_frame.clear_progress()
+                    self.append_result(self.general_result,
+                                       "Ошибки не обнаружены")
+            else:
+                self.append_result(self.general_result, f"Ошибка: {response}")
 
         except Exception as e:
-            self.logger.error(f"Error updating progress display: {e}")
+            self.append_result(self.general_result, f"Ошибка: {str(e)}")
 
-        # Schedule next update
-        self.root.after(1000, self.update_progress_display)  # Update every 1000ms (1 second)
-        
-    def on_url_change(self, url):
-        """Handle URL input change"""
-        # URL change handling simplified
-        pass
-            
-    def on_format_change(self, format_info):
-        """Handle format selection change"""
-        self.logger.info(f"Format changed: {format_info}")
-        
-    def on_output_change(self, output_path):
-        """Handle output directory change"""
-        self.logger.info(f"Output directory changed: {output_path}")
-        
-    def on_queue_change(self):
-        """Handle download queue changes"""
-        # Queue change handling simplified
-        pass
+    def clear_dtc(self):
+        """Стирание кодов ошибок"""
+        if not self.check_connection():
+            return
 
-    def clear_failed_downloads(self):
-        """Clear all failed downloads from the queue"""
+        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите стереть все коды ошибок?"):
+            self.clear_result(self.general_result)
+            self.append_result(self.general_result, "=== Стирание ошибок ===")
+
+            try:
+                response = self.kwp.clear_dtc(0x0000)
+                if response.get('type') == 'response':
+                    self.append_result(self.general_result,
+                                       "Коды ошибок успешно стерты")
+                else:
+                    self.append_result(self.general_result,
+                                       f"Ошибка: {response}")
+            except Exception as e:
+                self.append_result(self.general_result, f"Ошибка: {str(e)}")
+
+    def ecu_reset(self):
+        """Сброс ЭБУ"""
+        if not self.check_connection():
+            return
+
+        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите выполнить сброс ЭБУ?"):
+            self.clear_result(self.general_result)
+            self.append_result(self.general_result, "=== Сброс ЭБУ ===")
+
+            try:
+                response = self.kwp.ecu_reset(0x01)
+                if response.get('type') == 'response':
+                    self.append_result(self.general_result,
+                                       "ЭБУ успешно сброшен")
+                    # После сброса нужно переподключиться
+                    self.disconnect()
+                    time.sleep(2)
+                    self.connect()
+                else:
+                    self.append_result(self.general_result,
+                                       f"Ошибка: {response}")
+            except Exception as e:
+                self.append_result(self.general_result, f"Ошибка: {str(e)}")
+
+    def read_data(self):
+        """Чтение данных по идентификатору"""
+        if not self.check_connection():
+            return
+
+        selected = self.data_id_combo.current()
+        data_id = self.data_id_combo.cget("values")[selected][1]
+
+        self.clear_result(self.data_result)
+        self.append_result(
+            self.data_result, f"=== Чтение данных (ID: {data_id:02X}) ===")
+
         try:
-            cleared_count = self.download_manager.clear_failed_downloads()
-            if cleared_count > 0:
-                self.logger.info(f"Cleared {cleared_count} failed downloads")
-                # Clear the startup failed IDs as well
-                self.startup_failed_ids.clear()
-                # Show success notification
-                if self.notification_manager:
-                    self.notification_manager.show_success(
-                        "Errors Cleared",
-                        f"Cleared {cleared_count} failed download(s)"
-                    )
+            response = self.kwp.read_data_by_local_id(data_id)
+            if response.get('type') == 'response':
+                # Простой вывод hex-дампом
+                hex_data = ' '.join(f"{b:02X}" for b in response['data'])
+                self.append_result(self.data_result, f"Данные: {hex_data}")
+
+                # Здесь можно добавить специфичный разбор для каждого ID
+                if data_id == 0x01:  # RLI_ASS
+                    params = KWPUtils.parse_ass_params(response['data'])
+                    for key, value in params.items():
+                        self.append_result(self.data_result, f"{key}: {value}")
+            else:
+                self.append_result(self.data_result, f"Ошибка: {response}")
+
         except Exception as e:
-            self.logger.error(f"Failed to clear failed downloads: {e}")
-            if self.error_handler:
-                self.error_handler.handle_unexpected_error(e, "clearing failed downloads")
-            
-    def add_to_queue(self, url, format_info=None, output_path=None):
-        """Add a download to the queue"""
+            self.append_result(self.data_result, f"Ошибка: {str(e)}")
+
+    def control_device(self):
+        """Управление исполнительным устройством"""
+        if not self.check_connection():
+            return
+
+        # Получаем выбранные параметры
+        selected_device = self.control_combo.current()
+        device_id = self.control_combo.cget("values")[selected_device][1]
+
+        selected_action = self.action_combo.current()
+        action_map = {
+            0: (0x06, 0x01),  # Включить (ECO, ON)
+            1: (0x06, 0x00),  # Выключить (ECO, OFF)
+            2: (0x01, None),   # Отчет (RCS)
+            3: (0x04, None)    # Сброс (RTD)
+        }
+        action_param, action_data = action_map[selected_action]
+
+        self.clear_result(self.control_result)
+        self.append_result(self.control_result,
+                           f"=== Управление устройством {device_id:02X} ===")
+
         try:
-            # Validate URL
-            if not url or not url.strip():
-                self.error_handler.handle_validation_error("URL", "Please enter a valid URL")
-                return
+            if action_data is not None:
+                response = self.kwp.input_output_control(
+                    device_id, action_param, bytes([action_data]))
+            else:
+                response = self.kwp.input_output_control(
+                    device_id, action_param)
 
-            # Get current selections if not provided
-            if format_info is None:
-                format_info = self.format_selector_frame.get_selected_format()
-            if output_path is None:
-                output_path = self.output_selector_frame.get_output_path()
-
-            # Validate output path
-            if not output_path:
-                self.error_handler.handle_validation_error("Output Directory", "Please select an output directory")
-                return
-
-            # Show preparing state immediately
-            self.progress_frame.show_preparing("Preparing download...")
-
-            # Start download immediately
-            download_id = self.download_manager.add_download(url, format_info, output_path)
-
-            # Show success notification
-            self.notification_manager.show_success(
-                "Download Started",
-                f"Download started"
-            )
-
-            # Clear URL input
-            self.url_input_frame.set_url("")
+            if response.get('type') == 'response':
+                self.append_result(self.control_result,
+                                   "Команда выполнена успешно")
+                # Выводим ответные данные, если они есть
+                if response['data']:
+                    hex_data = ' '.join(f"{b:02X}" for b in response['data'])
+                    self.append_result(self.control_result,
+                                       f"Ответ: {hex_data}")
+            else:
+                self.append_result(self.control_result, f"Ошибка: {response}")
 
         except Exception as e:
-            self.logger.error(f"Failed to add to queue: {e}")
-            # Don't show error in progress display anymore - just log it
-            # self.progress_frame.show_error(f"Failed to start download: {str(e)}")
-            self.error_handler.handle_download_error(e, url)
-            
+            self.append_result(self.control_result, f"Ошибка: {str(e)}")
 
-        
-    def on_closing(self):
-        """Handle app closing"""
-        try:
-            active_downloads = len([
-                item for item in self.download_manager.get_queue()
-                if item.status.value == 'downloading'
-            ])
-
-            if active_downloads > 0:
-                result = messagebox.askyesno(
-                    "Active Downloads",
-                    f"There are {active_downloads} active download(s).\n\n"
-                    "Do you want to stop them and exit?",
-                    parent=self.root
-                )
-                if not result:
-                    return
-
-            self.download_manager.stop_all_downloads()
-            self.settings_manager.save_settings()
-            self.root.destroy()
-
-        except Exception as e:
-            self.logger.error(f"Error during shutdown: {e}")
-            self.root.destroy()
-
-
-
-    def run(self):
-        """Start the application"""
-        self.logger.info("Starting GUI application")
-        self.root.mainloop()
+    def check_connection(self):
+        """Проверка подключения"""
+        if not self.connected:
+            messagebox.showwarning("Ошибка", "Сначала подключитесь к ЭБУ")
+            return False
+        return True
