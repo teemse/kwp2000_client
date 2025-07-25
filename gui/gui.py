@@ -1,28 +1,8 @@
-# -*- coding: utf-8 -*-
-"""
-Main GUI window
-Author: vokrob (Данил Борков)
-Date: 18.07.2025
-"""
-
 import customtkinter as ctk
-import tkinter as tk
-from tkinter import messagebox
+from tkinter import scrolledtext, messagebox
+from core.kwp2000 import KWP2000, KWPUtils
+from serial import SerialException
 import time
-
-
-from ytdlp_gui.core.settings_manager import SettingsManager
-from ytdlp_gui.gui.components.url_input import URLInputFrame
-from ytdlp_gui.gui.components.format_selector import FormatSelectorFrame
-from ytdlp_gui.gui.components.output_selector import OutputSelectorFrame
-from ytdlp_gui.gui.components.progress_display import ProgressDisplayFrame
-from ytdlp_gui.gui.components.download_queue import DownloadQueueFrame
-from ytdlp_gui.gui.components.simple_url_input import SimpleURLInputFrame
-from ytdlp_gui.gui.components.video_preview import VideoPreviewFrame
-from ytdlp_gui.gui.components.download_options import DownloadOptionsFrame
-
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
 
 
 class KWP2000GUI:
@@ -31,9 +11,13 @@ class KWP2000GUI:
         self.root.title("Диагностика Январь(M1.5.4N)")
         self.root.geometry("500x500")
 
+        # Настройка темы
+        ctk.set_appearance_mode("System")  # Системная тема
+        ctk.set_default_color_theme("blue")  # Синяя цветовая тема
+
         # Переменные
-        self.port_var = tk.StringVar(value="COM2")
-        self.baudrate_var = tk.IntVar(value=10400)
+        self.port_var = ctk.StringVar(value="COM2")
+        self.baudrate_var = ctk.IntVar(value=10400)
         self.connected = False
         self.kwp = None
 
@@ -47,47 +31,65 @@ class KWP2000GUI:
 
     def create_connection_frame(self):
         """Панель подключения"""
-        frame = ttk.LabelFrame(self.root, text="Подключение", padding=10)
-        frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+        frame = ctk.CTkFrame(self.root, corner_radius=10)
+        frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew", columnspan=2)
+
+        # Заголовок
+        ctk.CTkLabel(frame,
+                     text="Подключение",
+                     font=("Arial", 14, "bold")).grid(
+            row=0, column=0, columnspan=6, pady=(0, 10))
 
         # Порт
-        ttk.Label(frame, text="Порт:").grid(row=0, column=0, sticky="e")
-        self.port_entry = ttk.Entry(
-            frame, textvariable=self.port_var, width=10)
-        self.port_entry.grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(frame, text="Порт:").grid(
+            row=1, column=0, sticky="e", padx=(10, 0))
+        self.port_entry = ctk.CTkEntry(
+            frame, textvariable=self.port_var, width=100)
+        self.port_entry.grid(row=1, column=1, sticky="w")
 
         # Скорость
-        ttk.Label(frame, text="Скорость:").grid(row=0, column=2, sticky="e")
-        self.baudrate_combo = ttk.Combobox(frame,
-                                           textvariable=self.baudrate_var,
-                                           values=[10400, 38400, 57600],
-                                           width=8)
-        self.baudrate_combo.grid(row=0, column=3, sticky="w")
+        ctk.CTkLabel(frame, text="Скорость:").grid(
+            row=1, column=2, sticky="e", padx=(10, 0))
+        self.baudrate_combo = ctk.CTkComboBox(frame,
+                                              variable=self.baudrate_var,
+                                              values=[
+                                                  "10400", "38400", "57600"],
+                                              width=100)
+        self.baudrate_combo.grid(row=1, column=3, sticky="w")
 
         # Кнопки подключения
-        self.connect_btn = ttk.Button(
-            frame, text="Подключиться", command=self.connect)
-        self.connect_btn.grid(row=0, column=4, padx=5)
+        self.connect_btn = ctk.CTkButton(
+            frame,
+            text="Подключиться",
+            command=self.connect,
+            fg_color="green",
+            hover_color="dark green")
+        self.connect_btn.grid(row=1, column=4, padx=10)
 
-        self.disconnect_btn = ttk.Button(
+        self.disconnect_btn = ctk.CTkButton(
             frame, text="Отключиться",
             command=self.disconnect,
-            state=tk.DISABLED)
-        self.disconnect_btn.grid(row=0, column=5, padx=5)
+            state="disabled",
+            fg_color="red", hover_color="dark red")
+        self.disconnect_btn.grid(row=1, column=5, padx=(0, 10))
 
         # Статус
-        self.status_label = ttk.Label(
-            frame, text="Отключено", foreground="red")
-        self.status_label.grid(row=1, column=0, columnspan=6, pady=(5, 0))
+        self.status_label = ctk.CTkLabel(
+            frame, text="Отключено", text_color="red")
+        self.status_label.grid(row=2, column=0, columnspan=6, pady=(5, 10))
 
     def create_services_frame(self):
         """Панель сервисов"""
-        frame = ttk.LabelFrame(self.root, text="Сервисы", padding=10)
-        frame.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+        frame = ctk.CTkFrame(self.root, corner_radius=10)
+        frame.grid(row=1, column=0, padx=10, pady=5, sticky="nsew", rowspan=2)
+
+        # Заголовок
+        ctk.CTkLabel(frame, text="Сервисы", font=(
+            "Arial", 14, "bold")).pack(pady=(5, 10))
 
         # Вкладки
-        self.notebook = ttk.Notebook(frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+        self.notebook = ctk.CTkTabview(frame)
+        self.notebook.pack(fill="both", expand=True, padx=5, pady=(0, 5))
 
         # Вкладка общей диагностики
         self.create_general_tab()
@@ -100,131 +102,137 @@ class KWP2000GUI:
 
     def create_general_tab(self):
         """Вкладка общей диагностики"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="Общая диагностика")
+        tab = self.notebook.add("Общая диагностика")
 
         # Кнопки
-        ttk.Button(tab, text="Идентификация ЭБУ",
-                   command=self.read_ident).pack(pady=5, fill=tk.X)
-        ttk.Button(tab, text="Прочитать ошибки",
-                   command=self.read_dtc).pack(pady=5, fill=tk.X)
-        ttk.Button(tab, text="Стереть ошибки",
-                   command=self.clear_dtc).pack(pady=5, fill=tk.X)
-        ttk.Button(tab, text="Сброс ЭБУ", command=self.ecu_reset).pack(
-            pady=5, fill=tk.X)
+        ctk.CTkButton(tab, text="Идентификация ЭБУ",
+                      command=self.read_ident).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(tab, text="Прочитать ошибки",
+                      command=self.read_dtc).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(tab, text="Стереть ошибки",
+                      command=self.clear_dtc).pack(pady=5, fill="x", padx=10)
+        ctk.CTkButton(tab, text="Сброс ЭБУ", command=self.ecu_reset).pack(
+            pady=5, fill="x", padx=10)
 
         # Поле для вывода результатов
         self.general_result = scrolledtext.ScrolledText(
-            tab, height=10, state=tk.DISABLED)
-        self.general_result.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+            tab, height=10, state="disabled", wrap="word")
+        self.general_result.pack(
+            fill="both", expand=True, pady=(5, 10), padx=10)
 
     def create_read_data_tab(self):
         """Вкладка чтения параметров"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="Параметры")
+        tab = self.notebook.add("Параметры")
 
         # Выбор идентификатора
-        ttk.Label(tab, text="Идентификатор:").pack(pady=(5, 0))
+        ctk.CTkLabel(tab, text="Идентификатор:").pack(
+            pady=(5, 0), padx=10, anchor="w")
 
-        self.data_id_combo = ttk.Combobox(tab, values=[
-            ("01 - Комплектация", 0x01),
-            ("02 - End Of Line", 0x02),
-            ("03 - Factory Test", 0x03),
-            ("A0 - Immobilizer", 0xA0),
-            ("A1 - Body Serial", 0xA1),
-            ("A2 - Engine Serial", 0xA2),
-            ("A3 - Manufacture Date", 0xA3)
+        self.data_id_combo = ctk.CTkComboBox(tab, values=[
+            "01 - Комплектация (0x01)",
+            "02 - End Of Line (0x02)",
+            "03 - Factory Test (0x03)",
+            "A0 - Immobilizer (0xA0)",
+            "A1 - Body Serial (0xA1)",
+            "A2 - Engine Serial (0xA2)",
+            "A3 - Manufacture Date (0xA3)"
         ], state="readonly")
-        self.data_id_combo.pack(pady=5, fill=tk.X)
-        self.data_id_combo.current(0)
+        self.data_id_combo.pack(pady=5, fill="x", padx=10)
+        self.data_id_combo.set("01 - Комплектация (0x01)")
 
         # Кнопки
-        ttk.Button(tab, text="Прочитать данные",
-                   command=self.read_data).pack(pady=5, fill=tk.X)
+        ctk.CTkButton(tab, text="Прочитать данные",
+                      command=self.read_data).pack(pady=5, fill="x", padx=10)
 
         # Поле для вывода
         self.data_result = scrolledtext.ScrolledText(
-            tab, height=10, state=tk.DISABLED)
-        self.data_result.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+            tab, height=10, state="disabled", wrap="word")
+        self.data_result.pack(fill="both", expand=True, pady=(5, 10), padx=10)
 
     def create_control_tab(self):
         """Вкладка управления исполнительными механизмами"""
-        tab = ttk.Frame(self.notebook)
-        self.notebook.add(tab, text="Управление")
+        tab = self.notebook.add("Управление")
 
         # Выбор устройства
-        ttk.Label(tab, text="Устройство:").pack(pady=(5, 0))
+        ctk.CTkLabel(tab, text="Устройство:").pack(
+            pady=(5, 0), padx=10, anchor="w")
 
-        self.control_combo = ttk.Combobox(tab, values=[
-            ("Бензонасос (09)", 0x09),
-            ("Вентилятор (0A)", 0x0A),
-            ("Кондиционер (0B)", 0x0B),
-            ("Лампа неисправности (0C)", 0x0C),
-            ("Клапан адсорбера (0D)", 0x0D),
-            ("Регулятор ХХ (41)", 0x41),
-            ("Обороты ХХ (42)", 0x42)
+        self.control_combo = ctk.CTkComboBox(tab, values=[
+            "Бензонасос (0x09)",
+            "Вентилятор (0x0A)",
+            "Кондиционер (0x0B)",
+            "Лампа неисправности (0x0C)",
+            "Клапан адсорбера (0x0D)",
+            "Регулятор ХХ (0x41)",
+            "Обороты ХХ (0x42)"
         ], state="readonly")
-        self.control_combo.pack(pady=5, fill=tk.X)
-        self.control_combo.current(0)
+        self.control_combo.pack(pady=5, fill="x", padx=10)
+        self.control_combo.set("Бензонасос (0x09)")
 
         # Состояние
-        ttk.Label(tab, text="Действие:").pack(pady=(5, 0))
+        ctk.CTkLabel(tab, text="Действие:").pack(
+            pady=(5, 0), padx=10, anchor="w")
 
-        self.action_combo = ttk.Combobox(tab, values=[
+        self.action_combo = ctk.CTkComboBox(tab, values=[
             "Включить",
             "Выключить",
             "Отчет о состоянии",
             "Сбросить в默认ное"
         ], state="readonly")
-        self.action_combo.pack(pady=5, fill=tk.X)
-        self.action_combo.current(0)
+        self.action_combo.pack(pady=5, fill="x", padx=10)
+        self.action_combo.set("Включить")
 
         # Кнопка
-        ttk.Button(tab, text="Выполнить", command=self.control_device).pack(
-            pady=5, fill=tk.X)
+        ctk.CTkButton(tab, text="Выполнить", command=self.control_device).pack(
+            pady=5, fill="x", padx=10)
 
         # Поле для вывода
         self.control_result = scrolledtext.ScrolledText(
-            tab, height=10, state=tk.DISABLED)
-        self.control_result.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+            tab, height=10, state="disabled", wrap="word")
+        self.control_result.pack(
+            fill="both", expand=True, pady=(5, 10), padx=10)
 
     def create_log_frame(self):
         """Лог сообщений"""
-        frame = ttk.LabelFrame(self.root, text="Лог", padding=10)
-        frame.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        frame = ctk.CTkFrame(self.root, corner_radius=10)
+        frame.grid(row=1, column=1, padx=10, pady=5, sticky="nsew")
+
+        # Заголовок
+        ctk.CTkLabel(frame, text="Лог сообщений", font=(
+            "Arial", 14, "bold")).pack(pady=(5, 10))
 
         self.log_text = scrolledtext.ScrolledText(
-            frame, height=10, state=tk.DISABLED)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
+            frame, height=10, state="disabled", wrap="word")
+        self.log_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         # Настройка grid для растягивания лога
-        self.root.rowconfigure(2, weight=1)
-        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=1)
+        self.root.columnconfigure(1, weight=1)
 
     def log_message(self, message):
         """Добавление сообщения в лог"""
-        self.log_text.config(state=tk.NORMAL)
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.config(state=tk.DISABLED)
-        self.log_text.see(tk.END)
+        self.log_text.config(state="normal")
+        self.log_text.insert("end", message + "\n")
+        self.log_text.config(state="disabled")
+        self.log_text.see("end")
 
     def clear_result(self, text_widget):
         """Очистка поля вывода"""
-        text_widget.config(state=tk.NORMAL)
-        text_widget.delete(1.0, tk.END)
-        text_widget.config(state=tk.DISABLED)
+        text_widget.config(state="normal")
+        text_widget.delete(1.0, "end")
+        text_widget.config(state="disabled")
 
     def append_result(self, text_widget, text):
         """Добавление текста в поле вывода"""
-        text_widget.config(state=tk.NORMAL)
-        text_widget.insert(tk.END, text + "\n")
-        text_widget.config(state=tk.DISABLED)
-        text_widget.see(tk.END)
+        text_widget.config(state="normal")
+        text_widget.insert("end", text + "\n")
+        text_widget.config(state="disabled")
+        text_widget.see("end")
 
     def connect(self):
         """Подключение к ЭБУ"""
         port = self.port_var.get()
-        baudrate = self.baudrate_var.get()
+        baudrate = int(self.baudrate_var.get())
 
         try:
             self.kwp = KWP2000(port, baudrate)
@@ -232,9 +240,10 @@ class KWP2000GUI:
 
             if response.get('type') == 'response':
                 self.connected = True
-                self.connect_btn.config(state=tk.DISABLED)
-                self.disconnect_btn.config(state=tk.NORMAL)
-                self.status_label.config(text="Подключено", foreground="green")
+                self.connect_btn.configure(state="disabled")
+                self.disconnect_btn.configure(state="normal")
+                self.status_label.configure(
+                    text="Подключено", text_color="green")
                 self.log_message(
                     f"Успешное подключение к {port} на скорости {baudrate}")
             else:
@@ -257,9 +266,9 @@ class KWP2000GUI:
                 self.kwp.stop_communication()
                 self.kwp.close()
                 self.connected = False
-                self.connect_btn.config(state=tk.NORMAL)
-                self.disconnect_btn.config(state=tk.DISABLED)
-                self.status_label.config(text="Отключено", foreground="red")
+                self.connect_btn.configure(state="normal")
+                self.disconnect_btn.configure(state="disabled")
+                self.status_label.configure(text="Отключено", text_color="red")
                 self.log_message("Отключено от ЭБУ")
             except Exception as e:
                 self.log_message(f"Ошибка отключения: {str(e)}")
@@ -300,8 +309,9 @@ class KWP2000GUI:
 
                 if dtcs:
                     for dtc in dtcs:
-                        self.append_result(self.general_result,
-                                           f"{dtc['code']}: {', '.join(dtc['status_flags'])}")
+                        self.append_result(
+                            self.general_result,
+                            f"{dtc['code']}: {', '.join(dtc['status_flags'])}")
                 else:
                     self.append_result(self.general_result,
                                        "Ошибки не обнаружены")
@@ -316,7 +326,7 @@ class KWP2000GUI:
         if not self.check_connection():
             return
 
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите стереть все коды ошибок?"):
+        if messagebox.askyesno("Вы хотите стереть все коды ошибок?"):
             self.clear_result(self.general_result)
             self.append_result(self.general_result, "=== Стирание ошибок ===")
 
@@ -336,7 +346,7 @@ class KWP2000GUI:
         if not self.check_connection():
             return
 
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите выполнить сброс ЭБУ?"):
+        if messagebox.askyesno("Вы хотите выполнить сброс ЭБУ?"):
             self.clear_result(self.general_result)
             self.append_result(self.general_result, "=== Сброс ЭБУ ===")
 
@@ -360,8 +370,8 @@ class KWP2000GUI:
         if not self.check_connection():
             return
 
-        selected = self.data_id_combo.current()
-        data_id = self.data_id_combo.cget("values")[selected][1]
+        selected = self.data_id_combo.get()
+        data_id = int(selected.split("(0x")[1].replace(")", ""), 16)
 
         self.clear_result(self.data_result)
         self.append_result(
@@ -391,15 +401,15 @@ class KWP2000GUI:
             return
 
         # Получаем выбранные параметры
-        selected_device = self.control_combo.current()
-        device_id = self.control_combo.cget("values")[selected_device][1]
+        selected_device = self.control_combo.get()
+        device_id = int(selected_device.split("(0x")[1].replace(")", ""), 16)
 
-        selected_action = self.action_combo.current()
+        selected_action = self.action_combo.get()
         action_map = {
-            0: (0x06, 0x01),  # Включить (ECO, ON)
-            1: (0x06, 0x00),  # Выключить (ECO, OFF)
-            2: (0x01, None),   # Отчет (RCS)
-            3: (0x04, None)    # Сброс (RTD)
+            "Включить": (0x06, 0x01),  # Включить (ECO, ON)
+            "Выключить": (0x06, 0x00),  # Выключить (ECO, OFF)
+            "Отчет о состоянии": (0x01, None),   # Отчет (RCS)
+            "Сбросить в默认ное": (0x04, None)    # Сброс (RTD)
         }
         action_param, action_data = action_map[selected_action]
 
@@ -435,3 +445,9 @@ class KWP2000GUI:
             messagebox.showwarning("Ошибка", "Сначала подключитесь к ЭБУ")
             return False
         return True
+
+
+if __name__ == "__main__":
+    root = ctk.CTk()
+    app = KWP2000GUI(root)
+    root.mainloop()

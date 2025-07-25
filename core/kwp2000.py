@@ -78,8 +78,8 @@ class KWP2000:
         # Чтение ответа
         self.ser.read(len(full_message))
         response = self.ser.read_all()
-        print(
-            f"Получено: {response.hex().upper() if response else 'Нет ответа'}")
+        print(f"Получено: {response.hex().upper()
+                           if response else 'Нет ответа'}")
 
         # Проверка контрольной суммы
         if len(response) > 0:
@@ -284,12 +284,10 @@ class KWPUtils:
 
         return params
 
-
-class KWP2000GUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Диагностика Январь(M1.5.4N)")
-        self.root.geometry("800x700")
+        self.root.geometry("500x500")
 
         # Настройка темы
         ctk.set_appearance_mode("System")  # Системная тема
@@ -315,7 +313,9 @@ class KWP2000GUI:
         frame.grid(row=0, column=0, padx=10, pady=5, sticky="ew", columnspan=2)
 
         # Заголовок
-        ctk.CTkLabel(frame, text="Подключение", font=("Arial", 14, "bold")).grid(
+        ctk.CTkLabel(frame,
+                     text="Подключение",
+                     font=("Arial", 14, "bold")).grid(
             row=0, column=0, columnspan=6, pady=(0, 10))
 
         # Порт
@@ -329,14 +329,19 @@ class KWP2000GUI:
         ctk.CTkLabel(frame, text="Скорость:").grid(
             row=1, column=2, sticky="e", padx=(10, 0))
         self.baudrate_combo = ctk.CTkComboBox(frame,
-                                           variable=self.baudrate_var,
-                                           values=["10400", "38400", "57600"],
-                                           width=100)
+                                              variable=self.baudrate_var,
+                                              values=[
+                                                  "10400", "38400", "57600"],
+                                              width=100)
         self.baudrate_combo.grid(row=1, column=3, sticky="w")
 
         # Кнопки подключения
         self.connect_btn = ctk.CTkButton(
-            frame, text="Подключиться", command=self.connect, fg_color="green", hover_color="dark green")
+            frame,
+            text="Подключиться",
+            command=self.connect,
+            fg_color="green",
+            hover_color="dark green")
         self.connect_btn.grid(row=1, column=4, padx=10)
 
         self.disconnect_btn = ctk.CTkButton(
@@ -379,11 +384,11 @@ class KWP2000GUI:
 
         # Кнопки
         ctk.CTkButton(tab, text="Идентификация ЭБУ",
-                   command=self.read_ident).pack(pady=5, fill="x", padx=10)
+                      command=self.read_ident).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(tab, text="Прочитать ошибки",
-                   command=self.read_dtc).pack(pady=5, fill="x", padx=10)
+                      command=self.read_dtc).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(tab, text="Стереть ошибки",
-                   command=self.clear_dtc).pack(pady=5, fill="x", padx=10)
+                      command=self.clear_dtc).pack(pady=5, fill="x", padx=10)
         ctk.CTkButton(tab, text="Сброс ЭБУ", command=self.ecu_reset).pack(
             pady=5, fill="x", padx=10)
 
@@ -415,7 +420,7 @@ class KWP2000GUI:
 
         # Кнопки
         ctk.CTkButton(tab, text="Прочитать данные",
-                   command=self.read_data).pack(pady=5, fill="x", padx=10)
+                      command=self.read_data).pack(pady=5, fill="x", padx=10)
 
         # Поле для вывода
         self.data_result = scrolledtext.ScrolledText(
@@ -582,7 +587,9 @@ class KWP2000GUI:
 
                 if dtcs:
                     for dtc in dtcs:
-                        self.append_result(self.general_result, f"{dtc['code']}: {', '.join(dtc['status_flags']}")
+                        self.append_result(
+                            self.general_result,
+                            f"{dtc['code']}: {', '.join(dtc['status_flags'])}")
                 else:
                     self.append_result(self.general_result,
                                        "Ошибки не обнаружены")
@@ -597,7 +604,7 @@ class KWP2000GUI:
         if not self.check_connection():
             return
 
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите стереть все коды ошибок?"):
+        if messagebox.askyesno("Вы хотите стереть все коды ошибок?"):
             self.clear_result(self.general_result)
             self.append_result(self.general_result, "=== Стирание ошибок ===")
 
@@ -617,7 +624,7 @@ class KWP2000GUI:
         if not self.check_connection():
             return
 
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите выполнить сброс ЭБУ?"):
+        if messagebox.askyesno("Вы хотите выполнить сброс ЭБУ?"):
             self.clear_result(self.general_result)
             self.append_result(self.general_result, "=== Сброс ЭБУ ===")
 
@@ -716,9 +723,3 @@ class KWP2000GUI:
             messagebox.showwarning("Ошибка", "Сначала подключитесь к ЭБУ")
             return False
         return True
-
-
-if __name__ == "__main__":
-    root = ctk.CTk()
-    app = KWP2000GUI(root)
-    root.mainloop()
